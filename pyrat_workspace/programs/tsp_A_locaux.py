@@ -1,0 +1,300 @@
+#####################################################################################################################################################
+######################################################################## INFO #######################################################################
+#####################################################################################################################################################
+
+"""
+    TSP
+    https://formations.imt-atlantique.fr/pyrat
+"""
+
+#####################################################################################################################################################
+###################################################################### IMPORTS ######################################################################
+#####################################################################################################################################################
+
+# Import PyRat
+from pyrat import *
+
+# External imports 
+import heapq as h
+
+# Previously developed functions
+from dijkstra_A import dijkstra 
+
+#####################################################################################################################################################
+############################################################### CONSTANTS & VARIABLES ###############################################################
+#####################################################################################################################################################
+
+# [TODO] It is good practice to keep all your constants and global variables in an easily identifiable section
+
+#####################################################################################################################################################
+##################################################################### FUNCTIONS #####################################################################
+#####################################################################################################################################################
+def meilleur_concentration(cheese_list,maze_width,maze_height):
+    """
+    on découpe la map en 4 pour trouver la partie avec le plus de fromage
+    """
+    middle_row=maze_height//2
+    middle_col=maze_width//2
+    cornerRS=0
+    cheese_RS=[]
+    cornerRN=0
+    cheese_RN=[]
+    cornerLS=0
+    cheese_LS=[]
+    cornerLN=0
+    cheese_LN=[]
+    for cheese in cheese_list:
+        if cheese%maze_height>middle_col:
+            if cheese//maze_height>middle_row:
+                cornerRS+=1
+                cheese_RS.append(cheese)
+            else:
+                cornerRN+=+1
+                cheese_RN.append(cheese)
+        else:
+            if cheese//maze_height>middle_row:
+                cornerLS+=1
+                cheese_LS.append(cheese)
+            else:
+                cornerLN+=1
+                cheese_LN.append(cheese)
+    maxi=max(cornerLN,cornerLS,cornerRS,cornerRN)
+    if maxi==cornerRS:
+        return cheese_RS
+    if maxi==cornerRN:
+        return cheese_RN
+    if maxi==cornerLS:
+        return cheese_LS
+    if maxi==cornerLN:
+        return cheese_LN
+def greedy(start_vertex:int,maze:Union[numpy.ndarray, Dict[int, Dict[int, int]]],cheeseG:List[int],maze_width:int):
+  villesG=[start_vertex]+cheeseG
+  distance_matrixG=[[[dijkstra(ville1,maze,[ville2],maze_width),ville1,ville2] for ville2 in villesG] for ville1 in villesG]
+  print(distance_matrixG[2][3][0][0])
+  cheese_n=0
+  chemin=[]
+  cheese_capt=[]
+  def mini(M,source,visited):
+    mini=M[source][0][0][0]
+    indice=0
+    for i in range(len(M)):
+       if M[source][i][2] in visited:
+          continue
+       else:
+         if mini>M[source][i][0][0]:
+           mini=M[source][i][0][0]
+           indice=i
+    return indice
+  source=0
+  while cheese_n<10:
+     indice=mini(distance_matrixG,source,cheese_capt)
+     chemin+=distance_matrixG[source][indice][0][1]
+     cheese_capt.append(distance_matrixG[source][indice][2])
+     cheese_n+=1
+     source=indice
+  return chemin ,cheese_capt
+
+
+
+
+def held_karp(start_vertex:int,maze:Union[numpy.ndarray, Dict[int, Dict[int, int]]],cheese:List[int],maze_width:int):
+  """
+  Renvoie le chemin le plus court à suivre pour ramasser des fromages dans un labyrinthe en complexité en O(n^2 * 2^n).
+  """
+  villes=[start_vertex]+cheese
+  distance_matrixG=[[dijkstra(ville1,maze,[ville2],maze_width) for ville2 in villes] for ville1 in villes]
+  n=len(cheese)+1
+  def combinaisons(n:int,k:int):
+    """
+    Renvoie les parties à k éléments de [2,n]
+    """
+    def aux(element, combinaison_actuelle):
+        if len(combinaison_actuelle)==k:
+            combinaisons.append(tuple(combinaison_actuelle))
+            return
+        for i in range(element, n+1):
+            combinaison_actuelle.append(i)
+            aux(i+1,combinaison_actuelle)
+            combinaison_actuelle.pop()
+    combinaisons=[]
+    aux(1,[])
+    return combinaisons
+
+  assert n>=2
+
+  if n==2 :
+    return dijkstra(start_vertex,maze,cheese,maze_width)
+    
+  else :
+    villes=[start_vertex]+cheese
+    distance_matrix=[[dijkstra(ville1,maze,[ville2],maze_width) for ville2 in villes] for ville1 in villes]
+    g={((k,),k):(dijkstra(start_vertex,maze,[villes[k]],maze_width)[0],[0]) for k in range(1,n)}
+    for s in range(2,n):
+      for S in combinaisons(n-1,s):
+        for k in range(s):
+          mini,ordre=float("inf"),None
+          n_S=S[:k]+S[k+1:]
+          for m in n_S:
+            if mini>g[n_S,m][0]+distance_matrix[m][S[k]][0]:
+              mini=g[n_S,m][0]+distance_matrix[m][S[k]][0]
+              ordre=g[n_S,m][1]+[m]
+          g[(S,S[k])]=mini,ordre
+    mini,ordre=float("inf"),None
+    for k in range(1,n):
+      if mini>g[tuple(range(1,n)),k][0]:
+        mini=g[tuple(range(1,n)),k][0]
+        ordre=g[tuple(range(1,n)),k][1]+[k]
+    directions=[]
+    for k in range(n-1):
+      directions+=distance_matrix[ordre[k]][ordre[k+1]][1]
+    return directions
+            
+#####################################################################################################################################################
+##################################################### EXECUTED ONCE AT THE BEGINNING OF THE GAME ####################################################
+#####################################################################################################################################################
+
+def preprocessing ( maze:             Union[numpy.ndarray, Dict[int, Dict[int, int]]],
+                    maze_width:       int,
+                    maze_height:      int,
+                    name:             str,
+                    teams:            Dict[str, List[str]],
+                    player_locations: Dict[str, int],
+                    cheese:           List[int],
+                    possible_actions: List[str],
+                    memory:           threading.local
+                  ) ->                None:
+
+    """
+        This function is called once at the beginning of the game.
+        It is typically given more time than the turn function, to perform complex computations.
+        Store the results of these computations in the provided memory to reuse them later during turns.
+        To do so, you can crete entries in the memory dictionary as memory.my_key = my_value.
+        In:
+            * maze:             Map of the maze, as data type described by PyRat's "maze_representation" option.
+            * maze_width:       Width of the maze in number of cells.
+            * maze_height:      Height of the maze in number of cells.
+            * name:             Name of the player controlled by this function.
+            * teams:            Recap of the teams of players.
+            * player_locations: Locations for all players in the game.
+            * cheese:           List of available pieces of cheese in the maze.
+            * possible_actions: List of possible actions.
+            * memory:           Local memory to share information between preprocessing, turn and postprocessing.
+        Out:
+            * None.
+    """
+    cheeseG=meilleur_concentration(cheese,maze_width,maze_height)
+    memory.move=[]
+    memory.move,visited=greedy(player_locations[name],maze,cheeseG,maze_width)
+    #calcul des fromages restants
+    cheese_restant=[]
+    for i in cheese:
+      if i in visited:
+        continue
+      else:
+        cheese_restant.append(i)
+    memory.move+=held_karp(visited[-1],maze,cheese_restant,maze_width)
+
+
+    
+#####################################################################################################################################################
+######################################################### EXECUTED AT EACH TURN OF THE GAME #########################################################
+#####################################################################################################################################################
+
+def turn ( maze:             Union[numpy.ndarray, Dict[int, Dict[int, int]]],
+           maze_width:       int,
+           maze_height:      int,
+           name:             str,
+           teams:            Dict[str, List[str]],
+           player_locations: Dict[str, int],
+           player_scores:    Dict[str, float],
+           player_muds:      Dict[str, Dict[str, Union[None, int]]],
+           cheese:           List[int],
+           possible_actions: List[str],
+           memory:           threading.local
+         ) ->                str:
+
+    """
+        This function is called at every turn of the game and should return an action within the set of possible actions.
+        You can access the memory you stored during the preprocessing function by doing memory.my_key.
+        You can also update the existing memory with new information, or create new entries as memory.my_key = my_value.
+        In:
+            * maze:             Map of the maze, as data type described by PyRat's "maze_representation" option.
+            * maze_width:       Width of the maze in number of cells.
+            * maze_height:      Height of the maze in number of cells.
+            * name:             Name of the player controlled by this function.
+            * teams:            Recap of the teams of players.
+            * player_locations: Locations for all players in the game.
+            * player_scores:    Scores for all players in the game.
+            * player_muds:      Indicates which player is currently crossing mud.
+            * cheese:           List of available pieces of cheese in the maze.
+            * possible_actions: List of possible actions.
+            * memory:           Local memory to share information between preprocessing, turn and postprocessing.
+        Out:
+            * action: One of the possible actions, as given in possible_actions.
+    """
+    return memory.move.pop(0)
+
+#####################################################################################################################################################
+######################################################## EXECUTED ONCE AT THE END OF THE GAME #######################################################
+#####################################################################################################################################################
+
+def postprocessing ( maze:             Union[numpy.ndarray, Dict[int, Dict[int, int]]],
+                     maze_width:       int,
+                     maze_height:      int,
+                     name:             str,
+                     teams:            Dict[str, List[str]],
+                     player_locations: Dict[str, int],
+                     player_scores:    Dict[str, float],
+                     player_muds:      Dict[str, Dict[str, Union[None, int]]],
+                     cheese:           List[int],
+                     possible_actions: List[str],
+                     memory:           threading.local,
+                     stats:            Dict[str, Any],
+                   ) ->                None:
+
+    """
+        This function is called once at the end of the game.
+        It is not timed, and can be used to make some cleanup, analyses of the completed game, model training, etc.
+        In:
+            * maze:             Map of the maze, as data type described by PyRat's "maze_representation" option.
+            * maze_width:       Width of the maze in number of cells.
+            * maze_height:      Height of the maze in number of cells.
+            * name:             Name of the player controlled by this function.
+            * teams:            Recap of the teams of players.
+            * player_locations: Locations for all players in the game.
+            * player_scores:    Scores for all players in the game.
+            * player_muds:      Indicates which player is currently crossing mud.
+            * cheese:           List of available pieces of cheese in the maze.
+            * possible_actions: List of possible actions.
+            * memory:           Local memory to share information between preprocessing, turn and postprocessing.
+        Out:
+            * None.
+    """
+
+    # [TODO] Write your postprocessing code here
+    pass
+    
+#####################################################################################################################################################
+######################################################################## GO! ########################################################################
+#####################################################################################################################################################
+
+if __name__ == "__main__":
+
+    # Map the functions to the character
+    players = [{"name": "TSP", "preprocessing_function": preprocessing, "turn_function": turn, "postprocessing_function": postprocessing}]
+
+    # Customize the game elements
+    config = {"maze_width": 31,
+              "maze_height": 29,
+              "mud_percentage": 20.0,
+              "nb_cheese": 20}
+
+    # Start the game
+    game = PyRat(players, **config)
+    stats = game.start()
+
+    # Show statistics
+    print(stats)
+
+#####################################################################################################################################################
+#####################################################################################################################################################
